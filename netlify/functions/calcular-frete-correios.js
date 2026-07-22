@@ -1,3 +1,4 @@
+
 // Proxy serverless (Netlify Functions) — consulta REAL na API oficial dos Correios
 // usando o contrato/cartão de postagem do cliente (API Preço + API Prazo).
 // Isso substitui o Melhor Envio quando o objetivo é bater 100% com o valor do contrato.
@@ -18,25 +19,42 @@
 //   LOJA_ORIGEM_PERMITIDA   -> opcional, ex: "https://minhaloja.myshopify.com" (CORS)
 //
 // Serviços consultados: PAC (03298) e SEDEX (03220).
-
+ 
 const SERVICOS = [
   { coProduto: '03298', nome: 'PAC' },
   { coProduto: '03220', nome: 'SEDEX' }
 ];
-
+ 
 // Cache simples em memória (dura enquanto a função ficar "quente" entre chamadas).
 let tokenCache = { token: null, expiraEm: 0 };
-
+ 
+// Lê a resposta como texto primeiro (nunca quebra) e só depois tenta converter pra JSON.
+// Se não for JSON válido, joga um erro com o status HTTP + o texto cru, pra dar pra
+// diagnosticar (ex: página de erro HTML, corpo vazio, etc.) em vez do genérico
+// "Unexpected end of JSON input".
+async function lerResposta(resposta, origem) {
+  const texto = await resposta.text();
+  let dados;
+  try {
+    dados = texto ? JSON.parse(texto) : {};
+  } catch (e) {
+    throw new Error(
+      `Resposta inesperada de ${origem} (status ${resposta.status}): ${texto.slice(0, 300) || '(corpo vazio)'}`
+    );
+  }
+  return { dados, ok: resposta.ok, status: resposta.status };
+}
+ 
 async function obterToken() {
   const agora = Date.now();
   if (tokenCache.token && tokenCache.expiraEm > agora + 30000) {
     return tokenCache.token;
   }
-
+ 
   const usuario = process.env.CORREIOS_USUARIO;
   const senha = process.env.CORREIOS_SENHA;
   const basic = Buffer.from(`${usuario}:${senha}`).toString('base64');
-
+ 
   const resposta = await fetch(
     `${process.env.CORREIOS_BASE_URL_TOKEN}/token/v1/autentica/cartaopostagem`,
     {
@@ -49,18 +67,18 @@ async function obterToken() {
       body: JSON.stringify({ numero: process.env.CORREIOS_CARTAO_POSTAGEM })
     }
   );
-
-  const dados = await resposta.json();
-  if (!resposta.ok || !dados.token) {
+ 
+  const { dados, ok } = await lerResposta(resposta, 'autenticação (token)');
+  if (!ok || !dados.token) {
     throw new Error('Falha ao autenticar nos Correios: ' + JSON.stringify(dados));
   }
-
+ 
   // expiraEm normalmente vem como string/data; se não vier, cacheia por 10 minutos.
   const expiraEmMs = dados.expiraEm ? new Date(dados.expiraEm).getTime() : agora + 10 * 60 * 1000;
   tokenCache = { token: dados.token, expiraEm: expiraEmMs };
   return dados.token;
 }
-
+ 
 async function consultarPreco(token, params) {
   const payload = {
     idLote: '001',
@@ -78,7 +96,7 @@ async function consultarPreco(token, params) {
       altura: String(params.altura)
     }))
   };
-
+ 
   const resposta = await fetch(`${process.env.CORREIOS_BASE_URL_PRECO}/nacional`, {
     method: 'POST',
     headers: {
@@ -88,12 +106,12 @@ async function consultarPreco(token, params) {
     },
     body: JSON.stringify(payload)
   });
-
-  const dados = await resposta.json();
-  if (!resposta.ok) throw new Error('Erro na API Preço: ' + JSON.stringify(dados));
+ 
+  const { dados, ok } = await lerResposta(resposta, 'API Preço');
+  if (!ok) throw new Error('Erro na API Preço: ' + JSON.stringify(dados));
   return Array.isArray(dados) ? dados : dados.parametrosProduto || dados.resultado || [];
 }
-
+ 
 async function consultarPrazo(token, params) {
   const payload = {
     idLote: '001',
@@ -104,7 +122,7 @@ async function consultarPrazo(token, params) {
       cepDestino: params.cepDestino
     }))
   };
-
+ 
   const resposta = await fetch(`${process.env.CORREIOS_BASE_URL_PRAZO}/nacional`, {
     method: 'POST',
     headers: {
@@ -114,12 +132,12 @@ async function consultarPrazo(token, params) {
     },
     body: JSON.stringify(payload)
   });
-
-  const dados = await resposta.json();
-  if (!resposta.ok) throw new Error('Erro na API Prazo: ' + JSON.stringify(dados));
+ 
+  const { dados, ok } = await lerResposta(resposta, 'API Prazo');
+  if (!ok) throw new Error('Erro na API Prazo: ' + JSON.stringify(dados));
   return Array.isArray(dados) ? dados : dados.parametrosPrazo || dados.resultado || [];
 }
-
+ 
 exports.handler = async function (event) {
   const origemPermitida = process.env.LOJA_ORIGEM_PERMITIDA || '*';
   const headers = {
@@ -127,30 +145,30 @@ exports.handler = async function (event) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   };
-
+ 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método não permitido' }) };
   }
-
+ 
   try {
     const { cepDestino, produtos } = JSON.parse(event.body || '{}');
-
+ 
     if (!cepDestino || !produtos || !Array.isArray(produtos) || produtos.length === 0) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Envie cepDestino e um array de produtos.' }) };
     }
-
+ 
     const cepLimpo = String(cepDestino).replace(/\D/g, '');
     if (cepLimpo.length !== 8) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'CEP de destino inválido.' }) };
     }
-
+ 
     // Soma peso de todos os itens do carrinho/produto; usa caixa padrão se não vier dimensão.
     const pesoGramas = produtos.reduce((soma, p) => soma + (Number(p.weight) * 1000 || 500), 0);
     const comprimento = Math.max(...produtos.map((p) => Number(p.length) || 16));
     const largura = Math.max(...produtos.map((p) => Number(p.width) || 11));
     const altura = Math.max(...produtos.map((p) => Number(p.height) || 11));
-
+ 
     const params = {
       cepOrigem: process.env.CORREIOS_CEP_ORIGEM,
       cepDestino: cepLimpo,
@@ -159,13 +177,13 @@ exports.handler = async function (event) {
       largura,
       altura
     };
-
+ 
     const token = await obterToken();
     const [precos, prazos] = await Promise.all([
       consultarPreco(token, params),
       consultarPrazo(token, params)
     ]);
-
+ 
     const opcoes = SERVICOS.map((s) => {
       const preco = precos.find((p) => p.coProduto === s.coProduto);
       const prazo = prazos.find((p) => p.coProduto === s.coProduto);
@@ -177,9 +195,10 @@ exports.handler = async function (event) {
         prazoDias: prazo ? prazo.prazoEntrega : null
       };
     }).filter(Boolean);
-
+ 
     return { statusCode: 200, headers, body: JSON.stringify({ opcoes }) };
   } catch (err) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Erro interno', detalhes: err.message }) };
   }
 };
+ 
