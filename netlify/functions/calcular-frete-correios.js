@@ -19,9 +19,11 @@
 //
 // Serviços consultados: PAC (03298) e SEDEX (03220).
  
+// Códigos das TABELAS específicas do contrato (não os códigos públicos padrão 03298/03220).
+// Confirmado no painel do site antigo: PAC usa a tabela 04596, Sedex usa a tabela 04553.
 const SERVICOS = [
-  { coProduto: '03298', nome: 'PAC' },
-  { coProduto: '03220', nome: 'SEDEX' }
+  { coProduto: '04596', nome: 'PAC' },
+  { coProduto: '04553', nome: 'SEDEX' }
 ];
  
 // Cache simples em memória (dura enquanto a função ficar "quente" entre chamadas).
@@ -65,7 +67,8 @@ async function consultarPreco(token, params) {
       tpObjeto: '2',
       comprimento: String(params.comprimento),
       largura: String(params.largura),
-      altura: String(params.altura)
+      altura: String(params.altura),
+      vlDeclarado: params.valorDeclarado ? String(params.valorDeclarado) : undefined
     }))
   };
  
@@ -140,6 +143,9 @@ exports.handler = async function (event) {
     const comprimento = Math.max(...produtos.map((p) => Number(p.length) || 16));
     const largura = Math.max(...produtos.map((p) => Number(p.width) || 11));
     const altura = Math.max(...produtos.map((p) => Number(p.height) || 11));
+    // Valor declarado (seguro) — soma do valor dos produtos. O site antigo provavelmente
+    // declara o valor da encomenda, o que gera um adicional no preço final dos Correios.
+    const valorDeclarado = produtos.reduce((soma, p) => soma + (Number(p.insurance_value) || 0), 0);
  
     const params = {
       cepOrigem: process.env.CORREIOS_CEP_ORIGEM,
@@ -147,7 +153,8 @@ exports.handler = async function (event) {
       pesoGramas,
       comprimento,
       largura,
-      altura
+      altura,
+      valorDeclarado
     };
  
     const token = await obterToken();
@@ -173,3 +180,4 @@ exports.handler = async function (event) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Erro interno', detalhes: err.message }) };
   }
 };
+ 
