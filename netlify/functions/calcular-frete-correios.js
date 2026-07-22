@@ -44,38 +44,11 @@ async function lerResposta(resposta, origem) {
   return { dados, ok: resposta.ok, status: resposta.status };
 }
  
+// A "chave de acesso" gerada em CWS > Chaves de acesso (com os escopos Preço v3 / Prazo v3
+// já habilitados, e restrita ao contrato/cartão de postagem) funciona como credencial pronta —
+// não precisa trocar por outro token antes. Usa direto como Bearer Token.
 async function obterToken() {
-  const agora = Date.now();
-  if (tokenCache.token && tokenCache.expiraEm > agora + 30000) {
-    return tokenCache.token;
-  }
- 
-  const usuario = process.env.CORREIOS_USUARIO;
-  const senha = process.env.CORREIOS_SENHA;
-  const basic = Buffer.from(`${usuario}:${senha}`).toString('base64');
- 
-  const resposta = await fetch(
-    `${process.env.CORREIOS_BASE_URL_TOKEN}/token/v1/autentica/cartaopostagem`,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Basic ${basic}`
-      },
-      body: JSON.stringify({ numero: process.env.CORREIOS_CARTAO_POSTAGEM })
-    }
-  );
- 
-  const { dados, ok, status } = await lerResposta(resposta, 'autenticação (token)');
-  if (!ok || !dados.token) {
-    throw new Error(`Falha ao autenticar nos Correios (status ${status}): ` + JSON.stringify(dados));
-  }
- 
-  // expiraEm normalmente vem como string/data; se não vier, cacheia por 10 minutos.
-  const expiraEmMs = dados.expiraEm ? new Date(dados.expiraEm).getTime() : agora + 10 * 60 * 1000;
-  tokenCache = { token: dados.token, expiraEm: expiraEmMs };
-  return dados.token;
+  return process.env.CORREIOS_SENHA;
 }
  
 async function consultarPreco(token, params) {
@@ -200,4 +173,3 @@ exports.handler = async function (event) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Erro interno', detalhes: err.message }) };
   }
 };
- 
