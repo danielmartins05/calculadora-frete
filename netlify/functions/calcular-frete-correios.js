@@ -1,4 +1,3 @@
-
 // Proxy serverless (Netlify Functions) — consulta REAL na API oficial dos Correios
 // usando o contrato/cartão de postagem do cliente (API Preço + API Prazo).
 // Isso substitui o Melhor Envio quando o objetivo é bater 100% com o valor do contrato.
@@ -68,9 +67,9 @@ async function obterToken() {
     }
   );
  
-  const { dados, ok } = await lerResposta(resposta, 'autenticação (token)');
+  const { dados, ok, status } = await lerResposta(resposta, 'autenticação (token)');
   if (!ok || !dados.token) {
-    throw new Error('Falha ao autenticar nos Correios: ' + JSON.stringify(dados));
+    throw new Error(`Falha ao autenticar nos Correios (status ${status}): ` + JSON.stringify(dados));
   }
  
   // expiraEm normalmente vem como string/data; se não vier, cacheia por 10 minutos.
@@ -107,8 +106,8 @@ async function consultarPreco(token, params) {
     body: JSON.stringify(payload)
   });
  
-  const { dados, ok } = await lerResposta(resposta, 'API Preço');
-  if (!ok) throw new Error('Erro na API Preço: ' + JSON.stringify(dados));
+  const { dados, ok, status } = await lerResposta(resposta, 'API Preço');
+  if (!ok) throw new Error(`Erro na API Preço (status ${status}): ` + JSON.stringify(dados));
   return Array.isArray(dados) ? dados : dados.parametrosProduto || dados.resultado || [];
 }
  
@@ -133,8 +132,8 @@ async function consultarPrazo(token, params) {
     body: JSON.stringify(payload)
   });
  
-  const { dados, ok } = await lerResposta(resposta, 'API Prazo');
-  if (!ok) throw new Error('Erro na API Prazo: ' + JSON.stringify(dados));
+  const { dados, ok, status } = await lerResposta(resposta, 'API Prazo');
+  if (!ok) throw new Error(`Erro na API Prazo (status ${status}): ` + JSON.stringify(dados));
   return Array.isArray(dados) ? dados : dados.parametrosPrazo || dados.resultado || [];
 }
  
