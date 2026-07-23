@@ -24,9 +24,13 @@
 
 const crypto = require('crypto');
 
+// Códigos do serviço adicional "Valor Declarado" — são DIFERENTES por serviço:
+// SEDEX usa 019, PAC usa 064 (o código do PAC foi trocado pelos Correios).
+// Sem declarar esse serviço adicional junto do vlDeclarado, a API rejeita com o
+// erro "ERP-052: Nao foi informado nenhum servico adicional do tipo Valor Declarado".
 const SERVICOS = [
-  { coProduto: '04596', nome: 'PAC' },
-  { coProduto: '04553', nome: 'SEDEX' }
+  { coProduto: '04596', nome: 'PAC', codigoValorDeclarado: '064' },
+  { coProduto: '04553', nome: 'SEDEX', codigoValorDeclarado: '019' }
 ];
 
 // Caixa/peso padrão quando o produto não tiver metafield de dimensão ou peso
@@ -104,6 +108,9 @@ async function buscarDadosVariante(variantExternalId) {
     })
   });
   const { dados, ok } = await lerResposta(resposta);
+  if (dados && dados.errors) {
+    console.error('[frete-yampi] GraphQL retornou erros:', JSON.stringify(dados.errors));
+  }
   const variante = ok && dados.data ? dados.data.productVariant : null;
 
   if (!variante) return { ...PADRAO };
@@ -140,20 +147,26 @@ async function buscarDadosVariante(variantExternalId) {
 async function consultarPreco(params) {
   const payload = {
     idLote: '001',
-    parametrosProduto: SERVICOS.map((s, i) => ({
-      coProduto: s.coProduto,
-      nuRequisicao: String(i + 1).padStart(4, '0'),
-      nuContrato: process.env.CORREIOS_CONTRATO,
-      nuDR: Number(process.env.CORREIOS_DR),
-      cepOrigem: params.cepOrigem,
-      cepDestino: params.cepDestino,
-      psObjeto: String(params.pesoGramas),
-      tpObjeto: '2',
-      comprimento: String(params.comprimento),
-      largura: String(params.largura),
-      altura: String(params.altura),
-      vlDeclarado: params.valorDeclarado ? String(params.valorDeclarado) : undefined
-    }))
+    parametrosProduto: SERVICOS.map((s, i) => {
+      const item = {
+        coProduto: s.coProduto,
+        nuRequisicao: String(i + 1).padStart(4, '0'),
+        nuContrato: process.env.CORREIOS_CONTRATO,
+        nuDR: Number(process.env.CORREIOS_DR),
+        cepOrigem: params.cepOrigem,
+        cepDestino: params.cepDestino,
+        psObjeto: String(params.pesoGramas),
+        tpObjeto: '2',
+        comprimento: String(params.comprimento),
+        largura: String(params.largura),
+        altura: String(params.altura)
+      };
+      if (params.valorDeclarado) {
+        item.vlDeclarado = String(params.valorDeclarado);
+        item.servicosAdicionais = [{ coServAdicional: s.codigoValorDeclarado }];
+      }
+      return item;
+    })
   };
   const resposta = await fetch(`${process.env.CORREIOS_BASE_URL_PRECO}/nacional`, {
     method: 'POST',
@@ -219,7 +232,10 @@ exports.handler = async function (event) {
       const externalId = sku.platform && sku.platform.external_id;
       if (!externalId) return { ...PADRAO };
       if (!cacheVariantes[externalId]) {
-        cacheVariantes[externalId] = buscarDadosVariante(externalId).catch(() => ({ ...PADRAO }));
+        cacheVariantes[externalId] = buscarDadosVariante(externalId).catch((e) => {
+          console.error('[frete-yampi] falha ao buscar dados no Shopify para variante', externalId, ':', e.message);
+          return { ...PADRAO };
+        });
       }
       return cacheVariantes[externalId];
     }
