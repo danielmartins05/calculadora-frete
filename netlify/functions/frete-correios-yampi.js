@@ -121,7 +121,15 @@ exports.handler = async function (event) {
       valorDeclarado
     };
 
+    // LOG TEMPORÁRIO — pra comparar com o que a calculadora da página do produto usa.
+    // Ver em Netlify > Functions > frete-correios-yampi > Logs, depois de um teste no checkout.
+    console.log('[frete-yampi] skus recebidos da Yampi:', JSON.stringify(skus));
+    console.log('[frete-yampi] amount recebido da Yampi:', body.amount);
+    console.log('[frete-yampi] params calculados:', JSON.stringify(params));
+
     const [precos, prazos] = await Promise.all([consultarPreco(params), consultarPrazo(params)]);
+
+    console.log('[frete-yampi] resposta bruta Preço:', JSON.stringify(precos));
 
     const quotes = SERVICOS.map((s, i) => {
       const preco = precos.find((p) => p.coProduto === s.coProduto);
