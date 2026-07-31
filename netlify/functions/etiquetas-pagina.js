@@ -1,39 +1,166 @@
-// Serve a página do gerador de etiquetas (antes era um arquivo estático etiquetas.html)
-// atrás de um login (HTTP Basic Auth), já que ela mostra nome/endereço de clientes.
+// Serve a página do gerador de etiquetas, atrás de um login PRÓPRIO (formulário estilizado,
+// não o popup feio do navegador). A sessão fica guardada num cookie assinado por 7 dias.
 //
 // Variáveis de ambiente necessárias:
-//   ETIQUETAS_USUARIO, ETIQUETAS_SENHA -> mesmo usuário/senha configurados em
-//   listar-pedidos-etiquetas.js (as duas funções precisam usar os MESMOS valores).
+//   ETIQUETAS_USUARIO, ETIQUETAS_SENHA        -> login que você escolhe
+//   ETIQUETAS_SESSAO_SEGREDO                  -> qualquer texto longo e aleatório, só pra
+//                                                 assinar o cookie (invente uma string única,
+//                                                 tipo 32 caracteres soltos, e reaproveita o
+//                                                 MESMO valor em listar-pedidos-etiquetas.js)
 //
-// Depois de publicar, o endereço passa a ser:
-//   https://calculadorajl-frete.netlify.app/.netlify/functions/etiquetas-pagina
+// Endereço: https://calculadorajl-frete.netlify.app/.netlify/functions/etiquetas-pagina
 
-function autenticado(event) {
-  const usuarioEsperado = process.env.ETIQUETAS_USUARIO;
-  const senhaEsperada = process.env.ETIQUETAS_SENHA;
-  if (!usuarioEsperado || !senhaEsperada) return false;
+const crypto = require('crypto');
 
-  const cabecalho = event.headers.authorization || event.headers.Authorization || '';
-  const [tipo, credenciais] = cabecalho.split(' ');
-  if (tipo !== 'Basic' || !credenciais) return false;
+const NOME_COOKIE = 'jl_etq_sessao';
+const DURACAO_SESSAO_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
-  const decodificado = Buffer.from(credenciais, 'base64').toString('utf8');
-  const separador = decodificado.indexOf(':');
-  const usuario = decodificado.slice(0, separador);
-  const senha = decodificado.slice(separador + 1);
-
-  return usuario === usuarioEsperado && senha === senhaEsperada;
+function assinar(valor, segredo) {
+  return crypto.createHmac('sha256', segredo).update(valor).digest('hex');
 }
 
-function respostaNaoAutorizado() {
-  return {
-    statusCode: 401,
-    headers: { 'WWW-Authenticate': 'Basic realm="Etiquetas JL"', 'Content-Type': 'text/plain' },
-    body: 'Login necessário.'
-  };
+function criarCookie(segredo) {
+  const expiraEm = Date.now() + DURACAO_SESSAO_MS;
+  const assinatura = assinar(String(expiraEm), segredo);
+  const valor = `${expiraEm}.${assinatura}`;
+  const expiraData = new Date(expiraEm).toUTCString();
+  return `${NOME_COOKIE}=${valor}; Path=/; Expires=${expiraData}; HttpOnly; Secure; SameSite=Lax`;
 }
 
-const HTML = `<!DOCTYPE html>
+function sessaoValida(event, segredo) {
+  const cabecalhoCookie = event.headers.cookie || event.headers.Cookie || '';
+  const partes = cabecalhoCookie.split(';').map((p) => p.trim());
+  const cookie = partes.find((p) => p.startsWith(NOME_COOKIE + '='));
+  if (!cookie) return false;
+
+  const valor = cookie.slice((NOME_COOKIE + '=').length);
+  const [expiraEm, assinatura] = valor.split('.');
+  if (!expiraEm || !assinatura) return false;
+  if (Date.now() > Number(expiraEm)) return false;
+
+  return assinar(expiraEm, segredo) === assinatura;
+}
+
+function paginaLogin(erro) {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — Gerador de etiquetas JL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --verde: #74BE33;
+    --verde-escuro: #4C8A1E;
+    --preto: #161616;
+    --cinza-texto: #5C5C5C;
+    --cinza-borda: #E1E5DC;
+    --fundo: #F7F9F4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
+    margin: 0;
+    background: var(--fundo);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cartao {
+    background: #fff;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 16px;
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 340px;
+    box-shadow: 0 2px 10px rgba(20, 30, 20, 0.06);
+  }
+  .logo-bolha {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: var(--verde);
+    color: var(--preto);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 19px;
+    margin: 0 auto 18px;
+  }
+  h1 {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--preto);
+    text-align: center;
+    margin: 0 0 4px;
+  }
+  p.sub {
+    font-size: 13px;
+    color: var(--cinza-texto);
+    text-align: center;
+    margin: 0 0 24px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--preto);
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14.5px;
+    padding: 10px 12px;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    outline: none;
+  }
+  input:focus { border-color: var(--verde); }
+  button {
+    width: 100%;
+    background: var(--verde);
+    color: #fff;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    border: none;
+    border-radius: 9px;
+    padding: 11px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--verde-escuro); }
+  .erro {
+    background: #FBE9E7;
+    color: #8A2E20;
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+  <div class="cartao">
+    <div class="logo-bolha">JL</div>
+    <h1>Gerador de etiquetas</h1>
+    <p class="sub">Acesso restrito — faça login pra continuar</p>
+    ${erro ? '<div class="erro">Usuário ou senha incorretos.</div>' : ''}
+    <form method="POST" action="">
+      <label for="usuario">Usuário</label>
+      <input type="text" id="usuario" name="usuario" autocomplete="username" autofocus>
+      <label for="senha">Senha</label>
+      <input type="password" id="senha" name="senha" autocomplete="current-password">
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+</body>
+</html>`;
+}
+
+const HTML_FERRAMENTA = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -304,11 +431,48 @@ const HTML = `<!DOCTYPE html>
 </html>
 `;
 
+function parseCorpoForm(body, isBase64Encoded) {
+  const texto = isBase64Encoded ? Buffer.from(body || '', 'base64').toString('utf8') : (body || '');
+  const params = new URLSearchParams(texto);
+  return { usuario: params.get('usuario') || '', senha: params.get('senha') || '' };
+}
+
 exports.handler = async function (event) {
-  if (!autenticado(event)) return respostaNaoAutorizado();
+  const segredo = process.env.ETIQUETAS_SESSAO_SEGREDO;
+  const usuarioEsperado = process.env.ETIQUETAS_USUARIO;
+  const senhaEsperada = process.env.ETIQUETAS_SENHA;
+
+  if (!segredo || !usuarioEsperado || !senhaEsperada) {
+    return { statusCode: 500, body: 'Configuração incompleta: faltam variáveis de ambiente (ETIQUETAS_USUARIO, ETIQUETAS_SENHA, ETIQUETAS_SESSAO_SEGREDO).' };
+  }
+
+  if (event.httpMethod === 'POST') {
+    const { usuario, senha } = parseCorpoForm(event.body, event.isBase64Encoded);
+    if (usuario === usuarioEsperado && senha === senhaEsperada) {
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Set-Cookie': criarCookie(segredo) },
+        body: HTML_FERRAMENTA
+      };
+    }
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: paginaLogin(true)
+    };
+  }
+
+  if (!sessaoValida(event, segredo)) {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: paginaLogin(false)
+    };
+  }
+
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    body: HTML
+    body: HTML_FERRAMENTA
   };
 };
