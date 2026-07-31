@@ -264,6 +264,42 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
   }
   #btnImprimir:hover { background: var(--verde-claro); }
 
+  .botao-secundario {
+    background: #fff;
+    color: var(--cinza-texto);
+    border: 1.5px solid var(--cinza-borda);
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+  .botao-secundario:hover { background: var(--fundo); }
+
+  .barra-selecao {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--cinza-borda);
+  }
+
+  #contador {
+    font-size: 13px;
+    color: var(--cinza-texto);
+    margin-right: auto;
+  }
+
+  .link-discreto {
+    background: none;
+    border: none;
+    color: var(--cinza-texto);
+    font-size: 12.5px;
+    text-decoration: underline;
+    padding: 4px;
+    cursor: pointer;
+  }
+
   #status {
     font-size: 13.5px;
     color: var(--cinza-texto);
@@ -313,13 +349,40 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
   }
 
   .celula {
+    position: relative;
     border: 1px solid #000;
-    padding: 5px 6px;
+    padding: 5px 6px 5px 20px;
     font-family: "Arial Narrow", Arial, sans-serif;
     font-size: 8pt;
     line-height: 1.3;
     border-radius: 2px;
+    transition: opacity 0.15s ease;
   }
+
+  .celula.ja-impresso { background: #F5F6F3; opacity: 0.55; }
+
+  .celula .selecionar {
+    position: absolute;
+    top: 6px;
+    left: 5px;
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .badge-novo, .badge-impresso {
+    display: inline-block;
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 6.5pt;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .badge-novo { background: var(--verde); color: #fff; }
+  .badge-impresso { background: #B9BDB4; color: #fff; }
 
   .cabecalho { font-weight: bold; margin-bottom: 1px; }
   .ref { color: #888; margin: 2px 0; font-size: 7pt; }
@@ -333,7 +396,9 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     header, .painel, #status { display: none; }
     #area-grade { border: none; box-shadow: none; padding: 0; border-radius: 0; }
     #grade { gap: 0; }
-    .celula { border: 1px solid #000; border-radius: 0; }
+    .celula { border: 1px solid #000; border-radius: 0; padding: 5px 6px; opacity: 1 !important; }
+    .celula:not(.selecionada) { display: none; }
+    .celula .selecionar, .badge-novo, .badge-impresso { display: none; }
   }
 </style>
 </head>
@@ -351,8 +416,16 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
 
   <div class="painel">
     <button id="btnBuscar" onclick="buscarPedidos()">Buscar pedidos pendentes</button>
-    <button id="btnImprimir" onclick="window.print()" style="display:none;">Imprimir</button>
+    <button id="btnImprimir" onclick="imprimirSelecionadas()" style="display:none;">Imprimir selecionadas</button>
     <span id="status"></span>
+
+    <div id="barraSelecao" class="barra-selecao" style="display:none;">
+      <span id="contador"></span>
+      <button type="button" class="botao-secundario" onclick="marcarSoNovos()">Marcar só novos</button>
+      <button type="button" class="botao-secundario" onclick="marcarTodos(true)">Marcar todos</button>
+      <button type="button" class="botao-secundario" onclick="marcarTodos(false)">Desmarcar todos</button>
+      <button type="button" class="link-discreto" onclick="limparHistorico()">Limpar histórico de impressos</button>
+    </div>
   </div>
 
   <div id="area-grade">
@@ -363,15 +436,31 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
 
 <script>
   var FUNCTION_URL = 'https://calculadorajl-frete.netlify.app/.netlify/functions/listar-pedidos-etiquetas';
+  var CHAVE_IMPRESSOS = 'jl_etq_impressos';
 
-  function celulaHtml(pedido, seq, lote) {
+  function obterImpressos() {
+    try { return JSON.parse(localStorage.getItem(CHAVE_IMPRESSOS) || '[]'); }
+    catch (e) { return []; }
+  }
+
+  function salvarImpressos(lista) {
+    localStorage.setItem(CHAVE_IMPRESSOS, JSON.stringify(lista));
+  }
+
+  function celulaHtml(pedido, seq, lote, jaImpresso) {
     var linha2 = pedido.endereco2 ? (pedido.endereco2 + '<br>') : '';
     var itensHtml = (pedido.itens || [])
       .map(function (it) { return it.quantidade + 'x ' + it.titulo; })
       .join('<br>');
+    var classeExtra = jaImpresso ? 'ja-impresso' : 'selecionada';
+    var marcado = jaImpresso ? '' : 'checked';
+    var badge = jaImpresso
+      ? '<span class="badge-impresso">JÁ IMPRESSO</span>'
+      : '<span class="badge-novo">NOVO</span>';
     return '' +
-      '<div class="celula">' +
-        '<div class="cabecalho">DESTINATÁRIO #' + seq + '&nbsp;&nbsp;' + pedido.servico + '</div>' +
+      '<div class="celula ' + classeExtra + '" data-pedido="' + pedido.pedido + '">' +
+        '<input type="checkbox" class="selecionar" ' + marcado + ' onchange="alternarSelecao(this)">' +
+        '<div class="cabecalho">DESTINATÁRIO #' + seq + '&nbsp;&nbsp;' + pedido.servico + badge + '</div>' +
         pedido.nome + '<br>' +
         pedido.endereco1 + '<br>' +
         linha2 +
@@ -389,12 +478,66 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
       '</div>';
   }
 
+  function alternarSelecao(chk) {
+    var celula = chk.closest('.celula');
+    celula.classList.toggle('selecionada', chk.checked);
+    atualizarContador();
+  }
+
+  function atualizarContador() {
+    var total = document.querySelectorAll('#grade .celula').length;
+    var selecionadas = document.querySelectorAll('#grade .celula.selecionada').length;
+    var contador = document.getElementById('contador');
+    if (contador) contador.textContent = selecionadas + ' de ' + total + ' selecionada(s) para impressão';
+  }
+
+  function marcarTodos(valor) {
+    document.querySelectorAll('#grade input.selecionar').forEach(function (chk) {
+      chk.checked = valor;
+      chk.closest('.celula').classList.toggle('selecionada', valor);
+    });
+    atualizarContador();
+  }
+
+  function marcarSoNovos() {
+    document.querySelectorAll('#grade .celula').forEach(function (celula) {
+      var chk = celula.querySelector('input.selecionar');
+      var novo = !celula.classList.contains('ja-impresso');
+      chk.checked = novo;
+      celula.classList.toggle('selecionada', novo);
+    });
+    atualizarContador();
+  }
+
+  function limparHistorico() {
+    if (confirm('Isso vai esquecer quais etiquetas já foram impressas antes, e todas voltam a aparecer como "novo". Continuar?')) {
+      localStorage.removeItem(CHAVE_IMPRESSOS);
+      buscarPedidos();
+    }
+  }
+
+  function imprimirSelecionadas() {
+    var selecionadas = document.querySelectorAll('#grade .celula.selecionada');
+    if (selecionadas.length === 0) {
+      alert('Selecione ao menos uma etiqueta pra imprimir.');
+      return;
+    }
+    var impressos = obterImpressos();
+    selecionadas.forEach(function (celula) {
+      var pedido = celula.getAttribute('data-pedido');
+      if (impressos.indexOf(pedido) === -1) impressos.push(pedido);
+    });
+    salvarImpressos(impressos);
+    window.print();
+  }
+
   function buscarPedidos() {
     var status = document.getElementById('status');
     var btn = document.getElementById('btnBuscar');
     var grade = document.getElementById('grade');
     btn.disabled = true;
     document.getElementById('btnImprimir').style.display = 'none';
+    document.getElementById('barraSelecao').style.display = 'none';
     status.innerHTML = '<span class="ponto-carregando"></span> Buscando pedidos...';
     grade.innerHTML = '';
 
@@ -414,11 +557,19 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
             '<div class="vazio">Nenhuma etiqueta a ser impressa no momento.</div>';
           return;
         }
+        var impressos = obterImpressos();
         var lote = new Date().toISOString().slice(5, 10).replace('-', '');
-        var html = pedidos.map(function (p, i) { return celulaHtml(p, i + 1, lote); }).join('');
+        var html = pedidos.map(function (p, i) {
+          var jaImpresso = impressos.indexOf(p.pedido) !== -1;
+          return celulaHtml(p, i + 1, lote, jaImpresso);
+        }).join('');
         grade.innerHTML = html;
-        status.textContent = pedidos.length + ' pedido(s) encontrado(s).';
+
+        var novos = pedidos.filter(function (p) { return impressos.indexOf(p.pedido) === -1; }).length;
+        status.textContent = pedidos.length + ' pedido(s) encontrado(s) — ' + novos + ' novo(s), ' + (pedidos.length - novos) + ' já impresso(s) antes.';
         document.getElementById('btnImprimir').style.display = 'inline-block';
+        document.getElementById('barraSelecao').style.display = 'flex';
+        atualizarContador();
       })
       .catch(function (err) {
         btn.disabled = false;
