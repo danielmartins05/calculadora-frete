@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Gerador de etiquetas — JL Produtos Naturais</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color: #222; }
+  #controles { margin-bottom: 20px; }
+  button {
+    background: #2E5339; color: #fff; border: none; padding: 10px 18px;
+    border-radius: 4px; font-size: 15px; cursor: pointer;
+  }
+  button:disabled { background: #999; cursor: default; }
+  #status { margin-left: 12px; color: #666; font-size: 14px; }
+  #grade {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .celula {
+    border: 1px solid #000;
+    padding: 10px 12px;
+    font-family: "Courier New", monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .cabecalho { font-weight: bold; margin-bottom: 2px; }
+  .ref { color: #888; margin: 4px 0; }
+  .divisor { border-top: 1px dashed #999; margin: 6px 0; }
+  .rotulo-declaracao { font-size: 10.5px; color: #777; margin-bottom: 2px; }
+  @media print {
+    #controles, #status { display: none; }
+    body { margin: 0; }
+    .celula { border: 1px solid #000; }
+  }
+</style>
+</head>
+<body>
+
+<div id="controles">
+  <button id="btnBuscar" onclick="buscarPedidos()">Buscar pedidos pendentes</button>
+  <button id="btnImprimir" onclick="window.print()" style="display:none;">Imprimir</button>
+  <span id="status"></span>
+</div>
+
+<div id="grade"></div>
+
+<script>
+  var FUNCTION_URL = 'https://calculadorajl-frete.netlify.app/.netlify/functions/listar-pedidos-etiquetas';
+
+  function celulaHtml(pedido, seq, lote) {
+    var linha2 = pedido.endereco2 ? (pedido.endereco2 + '<br>') : '';
+    return '' +
+      '<div class="celula">' +
+        '<div class="cabecalho">DESTINATÁRIO #' + seq + '&nbsp;&nbsp;' + pedido.servico + '</div>' +
+        pedido.nome + '<br>' +
+        pedido.endereco1 + '<br>' +
+        linha2 +
+        pedido.cidade + ' - ' + pedido.estado + '<br>' +
+        'CEP: ' + pedido.cep +
+        '<div class="ref">' + seq + '-' + lote + '</div>' +
+        '<div class="divisor"></div>' +
+        '<div class="rotulo-declaracao">Declaração de conteúdo</div>' +
+        pedido.nome + '<br>' +
+        pedido.endereco1 + '<br>' +
+        linha2 +
+        pedido.cidade + ' - ' + pedido.estado + '<br>' +
+        'CEP: ' + pedido.cep +
+      '</div>';
+  }
+
+  function buscarPedidos() {
+    var status = document.getElementById('status');
+    var btn = document.getElementById('btnBuscar');
+    btn.disabled = true;
+    status.textContent = 'Buscando pedidos...';
+
+    fetch(FUNCTION_URL)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        btn.disabled = false;
+        if (data.error) {
+          status.textContent = 'Erro: ' + data.error;
+          return;
+        }
+        var pedidos = data.pedidos || [];
+        if (pedidos.length === 0) {
+          status.textContent = 'Nenhum pedido pendente de envio encontrado.';
+          document.getElementById('grade').innerHTML = '';
+          return;
+        }
+        var lote = new Date().toISOString().slice(5, 10).replace('-', '');
+        var html = pedidos.map(function (p, i) { return celulaHtml(p, i + 1, lote); }).join('');
+        document.getElementById('grade').innerHTML = html;
+        status.textContent = pedidos.length + ' pedido(s) encontrado(s).';
+        document.getElementById('btnImprimir').style.display = 'inline-block';
+      })
+      .catch(function (err) {
+        btn.disabled = false;
+        status.textContent = 'Erro ao buscar: ' + err.message;
+      });
+  }
+</script>
+
+</body>
+</html>
