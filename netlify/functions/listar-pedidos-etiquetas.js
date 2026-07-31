@@ -57,11 +57,11 @@ exports.handler = async function (event) {
   try {
     const token = await obterTokenShopify();
 
-    // Limita a 6 por vez (1 página de recortes) — pra pegar o próximo lote, é só
-    // despachar (fulfill) esses 6 na Shopify e buscar de novo.
+    // Limita a 20 por vez (1 página de recortes, 4 colunas x 5 linhas) — pra pegar o
+    // próximo lote, é só despachar (fulfill) esses 20 na Shopify e buscar de novo.
     const query = `
       query pedidosPendentes {
-        orders(first: 6, query: "financial_status:paid fulfillment_status:unfulfilled", sortKey: CREATED_AT, reverse: false) {
+        orders(first: 20, query: "financial_status:paid fulfillment_status:unfulfilled", sortKey: CREATED_AT, reverse: false) {
           edges {
             node {
               name
