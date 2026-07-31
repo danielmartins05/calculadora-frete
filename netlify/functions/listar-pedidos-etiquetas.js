@@ -57,9 +57,11 @@ exports.handler = async function (event) {
   try {
     const token = await obterTokenShopify();
 
+    // Limita a 6 por vez (1 página de recortes) — pra pegar o próximo lote, é só
+    // despachar (fulfill) esses 6 na Shopify e buscar de novo.
     const query = `
       query pedidosPendentes {
-        orders(first: 50, query: "financial_status:paid fulfillment_status:unfulfilled", sortKey: CREATED_AT, reverse: false) {
+        orders(first: 6, query: "financial_status:paid fulfillment_status:unfulfilled", sortKey: CREATED_AT, reverse: false) {
           edges {
             node {
               name
@@ -74,6 +76,14 @@ exports.handler = async function (event) {
               }
               shippingLine {
                 title
+              }
+              lineItems(first: 20) {
+                edges {
+                  node {
+                    title
+                    quantity
+                  }
+                }
               }
             }
           }
@@ -95,6 +105,10 @@ exports.handler = async function (event) {
     const pedidos = (dados.data.orders.edges || []).map(({ node }) => {
       const endereco = node.shippingAddress || {};
       const servico = (node.shippingLine && node.shippingLine.title) || '';
+      const itens = (node.lineItems.edges || []).map(({ node: item }) => ({
+        titulo: item.title,
+        quantidade: item.quantity
+      }));
       return {
         pedido: node.name,
         criadoEm: node.createdAt,
@@ -104,7 +118,8 @@ exports.handler = async function (event) {
         endereco2: endereco.address2 || '',
         cidade: endereco.city || '',
         estado: endereco.province || '',
-        cep: endereco.zip || ''
+        cep: endereco.zip || '',
+        itens
       };
     });
 
