@@ -7,9 +7,48 @@
 //
 // Variáveis de ambiente necessárias (reaproveita as já configuradas):
 //   SHOPIFY_STORE_DOMAIN, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET
+//   ETIQUETAS_SESSAO_SEGREDO -> MESMO valor configurado em etiquetas-pagina.js, usado
+//   pra validar o cookie de sessão criado no login (formulário próprio, não é mais o
+//   popup nativo do navegador). Esta função devolve nome/endereço de clientes, por isso
+//   continua protegida.
 //
 // Suposição de negócio (ajustável): "pendente de envio" = pedido pago (financial_status
 // PAID) e ainda não despachado (displayFulfillmentStatus UNFULFILLED ou PARTIALLY_FULFILLED).
+
+const crypto = require('crypto');
+const NOME_COOKIE = 'jl_etq_sessao';
+
+function assinar(valor, segredo) {
+  return crypto.createHmac('sha256', segredo).update(valor).digest('hex');
+}
+
+// Confere se existe um cookie de sessão válido (criado pelo login em etiquetas-pagina.js).
+// Se ETIQUETAS_SESSAO_SEGREDO não estiver configurado, bloqueia por segurança (em vez de
+// deixar aberto por engano).
+function autenticado(event) {
+  const segredo = process.env.ETIQUETAS_SESSAO_SEGREDO;
+  if (!segredo) return false;
+
+  const cabecalhoCookie = event.headers.cookie || event.headers.Cookie || '';
+  const partes = cabecalhoCookie.split(';').map((p) => p.trim());
+  const cookie = partes.find((p) => p.startsWith(NOME_COOKIE + '='));
+  if (!cookie) return false;
+
+  const valor = cookie.slice((NOME_COOKIE + '=').length);
+  const [expiraEm, assinatura] = valor.split('.');
+  if (!expiraEm || !assinatura) return false;
+  if (Date.now() > Number(expiraEm)) return false;
+
+  return assinar(expiraEm, segredo) === assinatura;
+}
+
+function respostaNaoAutorizado() {
+  return {
+    statusCode: 401,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ error: 'Sessão inválida ou expirada. Faça login novamente.' })
+  };
+}
 
 async function lerResposta(resposta) {
   const texto = await resposta.text();
@@ -53,6 +92,7 @@ exports.handler = async function (event) {
     'Content-Type': 'application/json'
   };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+  if (!autenticado(event)) return respostaNaoAutorizado();
 
   try {
     const token = await obterTokenShopify();
