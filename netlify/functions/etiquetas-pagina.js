@@ -385,7 +385,6 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
   .badge-impresso { background: #B9BDB4; color: #fff; }
 
   .cabecalho { font-weight: bold; margin-bottom: 1px; }
-  .ref { color: #888; margin: 2px 0; font-size: 7pt; }
   .divisor { border-top: 1px dashed #999; margin: 3px 0; }
   .rotulo-declaracao { font-size: 7pt; color: #777; margin-bottom: 1px; }
   .itens { margin-top: 2px; }
@@ -447,7 +446,7 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     localStorage.setItem(CHAVE_IMPRESSOS, JSON.stringify(lista));
   }
 
-  function celulaHtml(pedido, seq, lote, jaImpresso) {
+  function celulaHtml(pedido, jaImpresso) {
     var linha2 = pedido.endereco2 ? (pedido.endereco2 + '<br>') : '';
     var itensHtml = (pedido.itens || [])
       .map(function (it) { return it.quantidade + 'x ' + it.titulo; })
@@ -460,13 +459,13 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     return '' +
       '<div class="celula ' + classeExtra + '" data-pedido="' + pedido.pedido + '">' +
         '<input type="checkbox" class="selecionar" ' + marcado + ' onchange="alternarSelecao(this)">' +
-        '<div class="cabecalho">DESTINATÁRIO #' + seq + '&nbsp;&nbsp;' + pedido.servico + badge + '</div>' +
+        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.pagamento + '&nbsp;&nbsp;' + pedido.servico + badge + '</div>' +
         pedido.nome + '<br>' +
         pedido.endereco1 + '<br>' +
         linha2 +
         pedido.cidade + ' - ' + pedido.estado + '<br>' +
         'CEP: ' + pedido.cep +
-        '<div class="ref">' + seq + '-' + lote + '</div>' +
+        '<div class="itens">' + itensHtml + '</div>' +
         '<div class="divisor"></div>' +
         '<div class="rotulo-declaracao">Declaração de conteúdo</div>' +
         pedido.nome + '<br>' +
@@ -474,7 +473,6 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
         linha2 +
         pedido.cidade + ' - ' + pedido.estado + '<br>' +
         'CEP: ' + pedido.cep +
-        '<div class="itens">' + itensHtml + '</div>' +
       '</div>';
   }
 
@@ -558,10 +556,9 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
           return;
         }
         var impressos = obterImpressos();
-        var lote = new Date().toISOString().slice(5, 10).replace('-', '');
-        var html = pedidos.map(function (p, i) {
+        var html = pedidos.map(function (p) {
           var jaImpresso = impressos.indexOf(p.pedido) !== -1;
-          return celulaHtml(p, i + 1, lote, jaImpresso);
+          return celulaHtml(p, jaImpresso);
         }).join('');
         grade.innerHTML = html;
 
