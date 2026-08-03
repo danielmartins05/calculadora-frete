@@ -50,6 +50,38 @@ function respostaNaoAutorizado() {
   };
 }
 
+// Mapa nome do estado (sem acento, minúsculo) -> sigla. A Shopify às vezes devolve o
+// nome completo do estado em "province" em vez da sigla, então normalizamos aqui.
+const UF_POR_NOME = {
+  'acre': 'AC', 'alagoas': 'AL', 'amapa': 'AP', 'amazonas': 'AM', 'bahia': 'BA',
+  'ceara': 'CE', 'distrito federal': 'DF', 'espirito santo': 'ES', 'goias': 'GO',
+  'maranhao': 'MA', 'mato grosso': 'MT', 'mato grosso do sul': 'MS', 'minas gerais': 'MG',
+  'para': 'PA', 'paraiba': 'PB', 'parana': 'PR', 'pernambuco': 'PE', 'piaui': 'PI',
+  'rio de janeiro': 'RJ', 'rio grande do norte': 'RN', 'rio grande do sul': 'RS',
+  'rondonia': 'RO', 'roraima': 'RR', 'santa catarina': 'SC', 'sao paulo': 'SP',
+  'sergipe': 'SE', 'tocantins': 'TO'
+};
+
+function normalizarTexto(texto) {
+  return (texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+function siglaEstado(provincia) {
+  if (!provincia) return '';
+  if (provincia.trim().length <= 2) return provincia.trim().toUpperCase();
+  return UF_POR_NOME[normalizarTexto(provincia)] || provincia;
+}
+
+// Deduz se o pagamento foi via Pix, boleto ou cartão a partir do(s) gateway(s) usados no
+// pedido. Isso depende de como a Yampi/AppMax nomeia os gateways — se a letra vier errada
+// em algum caso real, é só ajustar essas palavras-chave.
+function letraPagamento(gateways) {
+  const texto = normalizarTexto((gateways || []).join(' '));
+  if (texto.indexOf('pix') !== -1) return 'P';
+  if (texto.indexOf('boleto') !== -1) return 'B';
+  return 'C';
+}
+
 async function lerResposta(resposta) {
   const texto = await resposta.text();
   try {
@@ -106,6 +138,7 @@ exports.handler = async function (event) {
             node {
               name
               createdAt
+              paymentGatewayNames
               shippingAddress {
                 name
                 address1
@@ -152,12 +185,13 @@ exports.handler = async function (event) {
       return {
         pedido: node.name,
         criadoEm: node.createdAt,
+        pagamento: letraPagamento(node.paymentGatewayNames),
         servico: /sedex/i.test(servico) ? 'SEDEX' : /pac/i.test(servico) ? 'PAC' : servico || '—',
         nome: endereco.name || '',
         endereco1: endereco.address1 || '',
         endereco2: endereco.address2 || '',
         cidade: endereco.city || '',
-        estado: endereco.province || '',
+        estado: siglaEstado(endereco.province),
         cep: endereco.zip || '',
         itens
       };
