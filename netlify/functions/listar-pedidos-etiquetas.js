@@ -82,6 +82,26 @@ function letraPagamento(gateways) {
   return 'C';
 }
 
+// A loja só trabalha com dois serviços de envio (PAC e SEDEX) — esta função GARANTE que
+// só um desses dois valores sai na etiqueta, nunca o texto bruto que a Shopify mandar.
+// Às vezes o nome do frete não vem literalmente como "PAC"/"SEDEX" (ex: "Padrão", "Normal",
+// "Convencional" pro PAC, ou "Expresso"/"Rápido" pro SEDEX) — por isso a lista de palavras-
+// chave é mais ampla. Se mesmo assim não bater com nada, assume PAC (é o serviço padrão/
+// econômico da loja), nunca deixa passar um texto desconhecido, e registra um aviso no log
+// pra dar pra conferir depois se apareceu um caso realmente estranho.
+function identificarServico(tituloFrete, codigoFrete, numeroPedido) {
+  const texto = normalizarTexto([tituloFrete, codigoFrete].filter(Boolean).join(' '));
+
+  const ehSedex = /(sedex|expresso|expressa|rapido|rapida|urgente)/.test(texto);
+  if (ehSedex) return 'SEDEX';
+
+  const ehPac = /(pac|padrao|normal|convencional|economico|economica|standard)/.test(texto);
+  if (ehPac) return 'PAC';
+
+  console.warn(`[listar-pedidos-etiquetas] serviço de frete não reconhecido no pedido ${numeroPedido}: "${tituloFrete}" (código: "${codigoFrete}") — assumindo PAC por padrão`);
+  return 'PAC';
+}
+
 async function lerResposta(resposta) {
   const texto = await resposta.text();
   try {
@@ -149,6 +169,7 @@ exports.handler = async function (event) {
               }
               shippingLine {
                 title
+                code
               }
               lineItems(first: 20) {
                 edges {
@@ -177,7 +198,8 @@ exports.handler = async function (event) {
 
     const pedidos = (dados.data.orders.edges || []).map(({ node }) => {
       const endereco = node.shippingAddress || {};
-      const servico = (node.shippingLine && node.shippingLine.title) || '';
+      const tituloFrete = (node.shippingLine && node.shippingLine.title) || '';
+      const codigoFrete = (node.shippingLine && node.shippingLine.code) || '';
       const itens = (node.lineItems.edges || []).map(({ node: item }) => ({
         titulo: item.title,
         quantidade: item.quantity
@@ -186,7 +208,7 @@ exports.handler = async function (event) {
         pedido: node.name,
         criadoEm: node.createdAt,
         pagamento: letraPagamento(node.paymentGatewayNames),
-        servico: /sedex/i.test(servico) ? 'SEDEX' : /pac/i.test(servico) ? 'PAC' : servico || '—',
+        servico: identificarServico(tituloFrete, codigoFrete, node.name),
         nome: endereco.name || '',
         endereco1: endereco.address1 || '',
         endereco2: endereco.address2 || '',
