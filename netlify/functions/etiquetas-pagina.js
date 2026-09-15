@@ -456,10 +456,13 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     var badge = jaImpresso
       ? '<span class="badge-impresso">JÁ IMPRESSO</span>'
       : '<span class="badge-novo">NOVO</span>';
+    // pedido.marcacao vem pronta do back-end: P (site+PAC), S (site+SEDEX),
+    // WP (WhatsApp+PAC), WS (WhatsApp+SEDEX). "?" quando o frete não foi reconhecido —
+    // nesse caso a etiqueta deve ser conferida antes de postar.
     return '' +
       '<div class="celula ' + classeExtra + '" data-pedido="' + pedido.pedido + '">' +
         '<input type="checkbox" class="selecionar" ' + marcado + ' onchange="alternarSelecao(this)">' +
-        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.pagamento + '&nbsp;&nbsp;' + pedido.servico + badge + '</div>' +
+        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.marcacao + badge + '</div>' +
         pedido.nome + '<br>' +
         pedido.endereco1 + '<br>' +
         linha2 +
