@@ -14,6 +14,14 @@
 //
 // Suposição de negócio (ajustável): "pendente de envio" = pedido pago (financial_status
 // PAID) e ainda não despachado (displayFulfillmentStatus UNFULFILLED ou PARTIALLY_FULFILLED).
+//
+// MARCAÇÃO DA ETIQUETA (decidido com o Ney em 15/09/2026): a letra do cabeçalho representa o
+// MEIO DE ENVIO, não a forma de pagamento. P = PAC, S = SEDEX, prefixadas por W quando o pedido
+// veio do WhatsApp (pedido manual com a tag 'canal-whatsapp'):
+//     P = site + PAC        S = site + SEDEX
+//    WP = WhatsApp + PAC   WS = WhatsApp + SEDEX
+// A palavra do serviço saiu do cabeçalho (era redundante com a letra) e a forma de pagamento
+// deixou de ser impressa — na bancada o que importa é em qual remessa o pacote vai.
 
 const crypto = require('crypto');
 const NOME_COOKIE = 'jl_etq_sessao';
@@ -75,6 +83,10 @@ function siglaEstado(provincia) {
 // Deduz se o pagamento foi via Pix, boleto ou cartão a partir do(s) gateway(s) usados no
 // pedido. Isso depende de como a Yampi/AppMax nomeia os gateways — se a letra vier errada
 // em algum caso real, é só ajustar essas palavras-chave.
+//
+// ATENÇÃO: desde 15/09/2026 esta letra NÃO é mais impressa na etiqueta (o cabeçalho passou a
+// mostrar o meio de envio). A função segue aqui e o valor continua no JSON de resposta, para
+// conferência e para o caso de a informação voltar a ser útil. Não é lida pelo front-end.
 function letraPagamento(gateways) {
   const texto = normalizarTexto((gateways || []).join(' '));
   if (texto.indexOf('pix') !== -1) return 'P';
@@ -82,24 +94,66 @@ function letraPagamento(gateways) {
   return 'C';
 }
 
-// A loja só trabalha com dois serviços de envio (PAC e SEDEX) — esta função GARANTE que
-// só um desses dois valores sai na etiqueta, nunca o texto bruto que a Shopify mandar.
-// Às vezes o nome do frete não vem literalmente como "PAC"/"SEDEX" (ex: "Padrão", "Normal",
-// "Convencional" pro PAC, ou "Expresso"/"Rápido" pro SEDEX) — por isso a lista de palavras-
-// chave é mais ampla. Se mesmo assim não bater com nada, assume PAC (é o serviço padrão/
-// econômico da loja), nunca deixa passar um texto desconhecido, e registra um aviso no log
-// pra dar pra conferir depois se apareceu um caso realmente estranho.
-function identificarServico(tituloFrete, codigoFrete, numeroPedido) {
+// Converte o frete escolhido no pedido na LETRA que vai no cabeçalho da etiqueta.
+// A loja trabalha com dois serviços dos Correios: PAC (P) e SEDEX (S).
+//
+// O nome do frete não vem sempre literal: a Shopify já mandou "Padrão" em vez de "PAC" (bug real
+// em produção), e no pedido manual o nome é o que a pessoa selecionar/digitar no admin. Por isso
+// a lista de palavras-chave é ampla.
+//
+// Quando não reconhece, devolve '?' de propósito, em vez de assumir PAC calado. Com a letra sendo
+// agora a ÚNICA informação de envio na etiqueta, chutar PAC mandaria o pacote para a remessa
+// errada sem ninguém perceber; um '?' impresso faz alguém conferir antes de postar.
+// Cai aqui também "Entrega local" e "Retirada na loja" da Shopify — as letras desses dois casos
+// ainda não foram definidas com o Ney; quando forem, é só acrescentar antes do return final.
+function letraEnvio(tituloFrete, codigoFrete, numeroPedido) {
   const texto = normalizarTexto([tituloFrete, codigoFrete].filter(Boolean).join(' '));
 
-  const ehSedex = /(sedex|expresso|expressa|rapido|rapida|urgente)/.test(texto);
-  if (ehSedex) return 'SEDEX';
+  if (!texto) {
+    console.warn(`[listar-pedidos-etiquetas] pedido ${numeroPedido} sem nome de frete — marcado com "?"`);
+    return '?';
+  }
 
-  const ehPac = /(pac|padrao|normal|convencional|economico|economica|standard)/.test(texto);
-  if (ehPac) return 'PAC';
+  if (/(sedex|expresso|expressa|rapido|rapida|urgente)/.test(texto)) return 'S';
+  if (/(pac|padrao|normal|convencional|economico|economica|standard)/.test(texto)) return 'P';
 
-  console.warn(`[listar-pedidos-etiquetas] serviço de frete não reconhecido no pedido ${numeroPedido}: "${tituloFrete}" (código: "${codigoFrete}") — assumindo PAC por padrão`);
-  return 'PAC';
+  console.warn(`[listar-pedidos-etiquetas] serviço de frete não reconhecido no pedido ${numeroPedido}: "${tituloFrete}" (código: "${codigoFrete}") — marcado com "?" para conferência manual`);
+  return '?';
+}
+
+// Nome completo do serviço, só para o JSON de resposta (não é impresso na etiqueta).
+// Útil para conferência e log; a etiqueta usa apenas a letra.
+function nomeServico(letra) {
+  if (letra === 'S') return 'SEDEX';
+  if (letra === 'P') return 'PAC';
+  return 'NÃO IDENTIFICADO';
+}
+
+// Diferencia pedido do site de pedido fechado por WhatsApp/atendimento. O pedido manual criado na
+// Shopify recebe a tag 'canal-whatsapp'; o pedido do site chega sem ela.
+//
+// Por que tag e não o canal de vendas nativo: o campo channelInformation da Shopify está marcado
+// como deprecado e o displayName passou a voltar nulo para canais de terceiros (o Yampi é um) a
+// partir da API 2026-01, sem substituto oficial definido. A tag é um campo que a JL controla.
+// O canal de vendas da Shopify continua servindo de auditoria: filtrar por "Rascunhos de pedido"
+// na lista de pedidos e comparar com a contagem de pedidos marcados com a tag.
+//
+// Padrão SITE quando não acha marcação — é o caso de 94% dos pedidos. Consequência a conhecer:
+// esquecer a tag faz o pedido de WhatsApp sair impresso como se fosse do site, sem erro visível.
+function identificarCanal(tags, numeroPedido) {
+  const texto = normalizarTexto((tags || []).join(' '));
+  if (/(canal-whatsapp|canal_whatsapp|whatsapp|wpp)/.test(texto)) return 'WHATSAPP';
+  if (/(canal-site|canal_site)/.test(texto)) return 'SITE';
+  if (texto !== '') {
+    console.warn(`[listar-pedidos-etiquetas] pedido ${numeroPedido} tem tag sem marcação de canal: "${(tags || []).join(', ')}" — assumindo SITE`);
+  }
+  return 'SITE';
+}
+
+// Junta canal + envio na marcação final que sai no cabeçalho: P, S, WP, WS (ou ?/W? quando o
+// serviço não foi reconhecido). Pedido do site não recebe prefixo nenhum.
+function marcacaoEtiqueta(canal, letra) {
+  return (canal === 'WHATSAPP' ? 'W' : '') + letra;
 }
 
 async function lerResposta(resposta) {
@@ -158,6 +212,7 @@ exports.handler = async function (event) {
             node {
               name
               createdAt
+              tags
               paymentGatewayNames
               shippingAddress {
                 name
@@ -204,11 +259,15 @@ exports.handler = async function (event) {
         titulo: item.title,
         quantidade: item.quantity
       }));
+      const canal = identificarCanal(node.tags, node.name);
+      const letra = letraEnvio(tituloFrete, codigoFrete, node.name);
       return {
         pedido: node.name,
         criadoEm: node.createdAt,
+        canal: canal,
+        marcacao: marcacaoEtiqueta(canal, letra),
+        servico: nomeServico(letra),
         pagamento: letraPagamento(node.paymentGatewayNames),
-        servico: identificarServico(tituloFrete, codigoFrete, node.name),
         nome: endereco.name || '',
         endereco1: endereco.address1 || '',
         endereco2: endereco.address2 || '',
