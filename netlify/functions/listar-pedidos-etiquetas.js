@@ -101,32 +101,31 @@ function letraPagamento(gateways) {
 // em produção), e no pedido manual o nome é o que a pessoa selecionar/digitar no admin. Por isso
 // a lista de palavras-chave é ampla.
 //
-// Quando não reconhece, devolve '?' de propósito, em vez de assumir PAC calado. Com a letra sendo
-// agora a ÚNICA informação de envio na etiqueta, chutar PAC mandaria o pacote para a remessa
-// errada sem ninguém perceber; um '?' impresso faz alguém conferir antes de postar.
-// Cai aqui também "Entrega local" e "Retirada na loja" da Shopify — as letras desses dois casos
-// ainda não foram definidas com o Ney; quando forem, é só acrescentar antes do return final.
+// Devolve 'S', 'P', ou null quando NÃO conseguiu reconhecer o nome do frete.
+// Quem chama decide o que fazer com o null — hoje assume PAC (serviço padrão da loja) e marca o
+// pedido como `assumido`, para o aviso aparecer na tela sem sujar a etiqueta impressa.
+// Decisão de 15/09/2026 com o Daniel: nada de '?' no papel. Um '?' impresso chega na bancada, num
+// pacote já fechado, para uma pessoa que não tem como resolver ali — avisa quem não pode agir.
+// O aviso fica na tela, onde ainda dá para conferir na Shopify antes de imprimir.
 function letraEnvio(tituloFrete, codigoFrete, numeroPedido) {
   const texto = normalizarTexto([tituloFrete, codigoFrete].filter(Boolean).join(' '));
 
   if (!texto) {
-    console.warn(`[listar-pedidos-etiquetas] pedido ${numeroPedido} sem nome de frete — marcado com "?"`);
-    return '?';
+    console.warn(`[listar-pedidos-etiquetas] pedido ${numeroPedido} sem nome de frete — assumindo PAC`);
+    return null;
   }
 
   if (/(sedex|expresso|expressa|rapido|rapida|urgente)/.test(texto)) return 'S';
   if (/(pac|padrao|normal|convencional|economico|economica|standard)/.test(texto)) return 'P';
 
-  console.warn(`[listar-pedidos-etiquetas] serviço de frete não reconhecido no pedido ${numeroPedido}: "${tituloFrete}" (código: "${codigoFrete}") — marcado com "?" para conferência manual`);
-  return '?';
+  console.warn(`[listar-pedidos-etiquetas] serviço de frete não reconhecido no pedido ${numeroPedido}: "${tituloFrete}" (código: "${codigoFrete}") — assumindo PAC, sinalizado como assumido`);
+  return null;
 }
 
 // Nome completo do serviço, só para o JSON de resposta (não é impresso na etiqueta).
 // Útil para conferência e log; a etiqueta usa apenas a letra.
 function nomeServico(letra) {
-  if (letra === 'S') return 'SEDEX';
-  if (letra === 'P') return 'PAC';
-  return 'NÃO IDENTIFICADO';
+  return letra === 'S' ? 'SEDEX' : 'PAC';
 }
 
 // Diferencia pedido do site de pedido fechado por WhatsApp/atendimento. O pedido manual criado na
@@ -260,13 +259,16 @@ exports.handler = async function (event) {
         quantidade: item.quantity
       }));
       const canal = identificarCanal(node.tags, node.name);
-      const letra = letraEnvio(tituloFrete, codigoFrete, node.name);
+      const letraLida = letraEnvio(tituloFrete, codigoFrete, node.name);
+      const assumido = letraLida === null;
+      const letra = assumido ? 'P' : letraLida;
       return {
         pedido: node.name,
         criadoEm: node.createdAt,
         canal: canal,
         marcacao: marcacaoEtiqueta(canal, letra),
         servico: nomeServico(letra),
+        assumido: assumido,
         pagamento: letraPagamento(node.paymentGatewayNames),
         nome: endereco.name || '',
         endereco1: endereco.address1 || '',
