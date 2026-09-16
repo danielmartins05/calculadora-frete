@@ -551,8 +551,8 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
 
   .cabecalho { font-weight: bold; margin-bottom: 1px; }
   .divisor { border-top: 1px dashed #999; margin: 3px 0; }
-  .rotulo-declaracao { font-size: 7pt; color: #777; margin-bottom: 1px; }
-  .itens { margin-top: 2px; }
+  .rotulo-declaracao, .rotulo-bloco { font-size: 7pt; color: #777; margin-bottom: 1px; }
+  .itens { margin-bottom: 1px; }
 
   @media print {
     body { background: #fff; margin: 0; }
@@ -628,7 +628,19 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
 <script>
   var FUNCTION_URL = 'https://calculadorajl-frete.netlify.app/.netlify/functions/listar-pedidos-etiquetas';
   var CHAVE_IMPRESSOS = 'jl_etq_impressos';
-  var POSICOES_FOLHA = 20;   // 4 colunas x 5 linhas por folha de recorte
+  // Medido com a etiqueta atual (destinatário + remetente + declaração) na largura útil de um
+  // A4: a célula fica em ~318px, então cabem 3 fileiras de 4 = 12 por folha, não as 20 de antes.
+  // Se a estrutura da etiqueta mudar de altura, este número tem que ser remedido.
+  var POSICOES_FOLHA = 12;
+
+  // Remetente fixo, impresso em toda etiqueta. Se a JL mudar de endereço, é só aqui.
+  var REMETENTE = [
+    'CLEONICE DE LIMA',
+    'AV. VEREADOR DAVID PASSARINHO, 341',
+    'CAIXA POSTAL 1001',
+    'ASSIS-SP',
+    'CEP: 19.804-970'
+  ];
 
   var pedidosCarregados = [];
   var filtroAtual = 'TODOS';
@@ -757,8 +769,10 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
         + 'FRETE ASSUMIDO</span>';
     }
 
+    // Cabeçalho = sigla + serviço por extenso: "DESTINATÁRIO #1842 WS SEDEX".
     // pedido.marcacao vem pronta do back-end: P (site+PAC), S (site+SEDEX),
-    // WP (WhatsApp+PAC), WS (WhatsApp+SEDEX).
+    // WP (WhatsApp+PAC), WS (WhatsApp+SEDEX). O nome por extenso vem de pedido.servico —
+    // a sigla diz o canal, a palavra evita que alguém precise decorar a tabela na bancada.
     var destinatario =
       pedido.nome + '<br>' +
       pedido.endereco1 + '<br>' +
@@ -775,11 +789,17 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
           + ' onchange="alternarSelecao(this)"'
           + ' aria-label="Imprimir etiqueta do pedido ' + pedido.pedido + '">' +
         '<div class="barra-celula">' + selos + '</div>' +
-        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.marcacao + '</div>' +
+        // bloco 1 — destinatário
+        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.marcacao + ' ' + pedido.servico + '</div>' +
         destinatario +
-        '<div class="itens">' + itensHtml + '</div>' +
         '<div class="divisor"></div>' +
+        // bloco 2 — remetente (fixo)
+        '<div class="rotulo-bloco">Remetente</div>' +
+        REMETENTE.join('<br>') +
+        '<div class="divisor"></div>' +
+        // bloco 3 — declaração de conteúdo: itens primeiro, endereço depois
         '<div class="rotulo-declaracao">Declaração de conteúdo</div>' +
+        '<div class="itens">' + itensHtml + '</div>' +
         destinatario +
       '</div>';
   }
