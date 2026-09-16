@@ -549,9 +549,22 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     * { transition: none !important; }
   }
 
-  .cabecalho { font-weight: bold; margin-bottom: 1px; }
-  .divisor { border-top: 1px dashed #999; margin: 3px 0; }
-  .rotulo-declaracao, .rotulo-bloco { font-size: 7pt; color: #777; margin-bottom: 1px; }
+  /* Os três títulos da etiqueta — DESTINATÁRIO, Remetente, Declaração de conteúdo — usam o
+     mesmo tratamento: negrito e 9pt contra os 8pt do corpo. Mudar aqui muda os três juntos. */
+  .cabecalho, .rotulo-bloco, .rotulo-declaracao {
+    font-weight: bold;
+    font-size: 9pt;
+    text-transform: uppercase;
+    margin-bottom: 1px;
+  }
+
+  /* Exceção: a declaração de conteúdo fica sem negrito e em caixa mista — é o rótulo de um
+     documento, não um dado de endereçamento como os outros dois. Mantém os 9pt. */
+  .rotulo-declaracao { font-weight: normal; text-transform: none; }
+  /* 2px em vez de 3px: com os títulos em caixa alta a etiqueta cresceu, e apertar o divisor
+     devolve folga na folha sem mexer em nada que se lê. */
+  .divisor { border-top: 1px dashed #999; margin: 2px 0; }
+
   .itens { margin-bottom: 1px; }
 
   @media print {
@@ -790,7 +803,7 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
           + ' aria-label="Imprimir etiqueta do pedido ' + pedido.pedido + '">' +
         '<div class="barra-celula">' + selos + '</div>' +
         // bloco 1 — destinatário
-        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.marcacao + ' ' + pedido.servico + '</div>' +
+        '<div class="cabecalho">DESTINATÁRIO ' + pedido.pedido + ' ' + pedido.marcacao + '&nbsp;' + pedido.servico + '</div>' +
         destinatario +
         '<div class="divisor"></div>' +
         // bloco 2 — remetente (fixo)
