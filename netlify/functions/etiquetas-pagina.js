@@ -549,23 +549,18 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     * { transition: none !important; }
   }
 
-  /* Os três títulos da etiqueta — DESTINATÁRIO, Remetente, Declaração de conteúdo — usam o
-     mesmo tratamento: negrito e 9pt contra os 8pt do corpo. Mudar aqui muda os três juntos. */
-  .cabecalho, .rotulo-bloco, .rotulo-declaracao {
+  /* Os dois títulos da etiqueta — DESTINATÁRIO e Remetente — usam o mesmo tratamento:
+     negrito e 9pt contra os 8pt do corpo. Mudar aqui muda os dois juntos.
+     O antigo "Declaração de conteúdo" saiu daqui: a lista de itens passou a viver no
+     documento oficial gerado pelo módulo declaracao.js. */
+  .cabecalho, .rotulo-bloco {
     font-weight: bold;
     font-size: 9pt;
     text-transform: uppercase;
     margin-bottom: 1px;
   }
 
-  /* Exceção: a declaração de conteúdo fica sem negrito e em caixa mista — é o rótulo de um
-     documento, não um dado de endereçamento como os outros dois. Mantém os 9pt. */
-  .rotulo-declaracao { font-weight: normal; text-transform: none; }
-  /* 2px em vez de 3px: com os títulos em caixa alta a etiqueta cresceu, e apertar o divisor
-     devolve folga na folha sem mexer em nada que se lê. */
   .divisor { border-top: 1px dashed #999; margin: 2px 0; }
-
-  .itens { margin-bottom: 1px; }
 
   @media print {
     body { background: #fff; margin: 0; }
@@ -750,10 +745,13 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
 <script>
   var FUNCTION_URL = 'https://calculadorajl-frete.netlify.app/.netlify/functions/listar-pedidos-etiquetas';
   var CHAVE_IMPRESSOS = 'jl_etq_impressos';
-  // Medido com a etiqueta atual (destinatário + remetente + declaração) na largura útil de um
-  // A4: a célula fica em ~318px, então cabem 3 fileiras de 4 = 12 por folha, não as 20 de antes.
+  // Medido no navegador, em modo de impressão, na largura útil de um A4 a 96dpi (718px) com
+  // a grade de 4 colunas: a célula (destinatário + remetente) fica em 218px de altura, então
+  // cabem 4 fileiras de 4 = 16 por folha, com 175px de sobra.
+  // Eram 12 enquanto a etiqueta carregava o bloco de declaração de conteúdo — aquele bloco
+  // repetia o endereço do destinatário e sozinho custava ~106px por etiqueta.
   // Se a estrutura da etiqueta mudar de altura, este número tem que ser remedido.
-  var POSICOES_FOLHA = 12;
+  var POSICOES_FOLHA = 16;
 
   // Remetente fixo, impresso em toda etiqueta. Se a JL mudar de endereço, é só aqui.
   var REMETENTE = [
@@ -863,10 +861,6 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
 
   function celulaHtml(pedido, jaImpresso) {
     var linha2 = pedido.endereco2 ? (pedido.endereco2 + '<br>') : '';
-    var itensHtml = (pedido.itens || [])
-      .map(function (it) { return it.quantidade + 'x ' + it.titulo; })
-      .join('<br>');
-
     var classes = ['celula'];
     classes.push(jaImpresso ? 'ja-impresso' : 'selecionada');
     if (pedido.assumido) classes.push('assumido');
@@ -918,11 +912,6 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
         // bloco 2 — remetente (fixo)
         '<div class="rotulo-bloco">Remetente</div>' +
         REMETENTE.join('<br>') +
-        '<div class="divisor"></div>' +
-        // bloco 3 — declaração de conteúdo: itens primeiro, endereço depois
-        '<div class="rotulo-declaracao">Declaração de conteúdo</div>' +
-        '<div class="itens">' + itensHtml + '</div>' +
-        destinatario +
       '</div>';
   }
 
