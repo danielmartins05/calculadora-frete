@@ -587,6 +587,113 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     .celula.filtrada { display: none; }
     .celula .selecionar, .barra-celula, .vazio { display: none; }
   }
+
+  /* ===================== DECLARAÇÃO DE CONTEÚDO (novo) =====================
+     Só tela — nada aqui sai na impressão das etiquetas. */
+
+  #area-declaracao { margin-top: 20px; }
+
+  #painelDeclaracao {
+    background: #fff;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 14px;
+    padding: 18px 22px;
+    box-shadow: 0 1px 3px rgba(30, 58, 40, 0.04);
+  }
+
+  .titulo-caixa {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: #8A9384; margin-bottom: 10px;
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .dica-caixa { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: #A3AC9D; }
+
+  .opcoes-envio { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .opcao-envio {
+    display: flex; gap: 11px; align-items: flex-start; text-align: left;
+    border-radius: 11px; padding: 12px 14px; cursor: pointer;
+    font-family: inherit; font-size: 14px; background: #fff;
+    border: 1.5px solid var(--cinza-borda);
+  }
+  .opcao-envio[aria-pressed="true"].op-etiqueta { border-color: var(--verde); background: var(--verde-claro); }
+  .opcao-envio[aria-pressed="true"].op-declaracao { border-color: #B7A9DC; background: #EFEBF8; }
+  .check-envio {
+    flex: none; width: 19px; height: 19px; border-radius: 5px; margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #fff; background: #C4CCBC;
+  }
+  .opcao-envio[aria-pressed="true"].op-etiqueta .check-envio { background: var(--verde-escuro); }
+  .opcao-envio[aria-pressed="true"].op-declaracao .check-envio { background: #5B4B8A; }
+  .nome-envio { display: block; font-weight: 600; color: #1C231E; }
+  .det-envio { display: block; font-size: 12.5px; color: var(--cinza-texto); margin-top: 2px; }
+
+  .total-envio {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 14px; padding: 11px 14px; background: var(--fundo);
+    border: 1px solid var(--cinza-borda); border-radius: 10px;
+    font-size: 13px; color: var(--cinza-texto); font-variant-numeric: tabular-nums;
+  }
+  .total-envio b { color: #1C231E; }
+  .aviso-janelas { margin-left: auto; font-size: 12.5px; color: #8A9384; }
+
+  .aviso-ano {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--ambar-fundo); border: 1px solid var(--ambar-borda);
+    border-radius: 10px; padding: 12px 15px; margin-top: 14px;
+    font-size: 13px; line-height: 1.55; color: #6B4405;
+  }
+  .aviso-ano b { color: var(--ambar); }
+  .ico-ano {
+    flex: none; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ambar); color: #fff; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .acoes-envio { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  #btnImprimirTudo {
+    background: #fff; color: var(--verde-escuro); border: 1.5px solid var(--verde);
+    font-size: 14.5px; font-weight: 600; border-radius: 9px; padding: 11px 20px; cursor: pointer;
+  }
+  #btnImprimirTudo:hover:not(:disabled) { background: var(--verde-claro); }
+  #btnImprimirTudo:disabled { color: #A7B4AC; border-color: var(--cinza-borda); cursor: default; }
+  .status-decl { font-size: 13px; color: var(--cinza-texto); }
+  .status-decl a { color: var(--verde-escuro); }
+
+  #visorDeclaracao {
+    margin-top: 16px; background: #fff; border: 1px solid var(--cinza-borda);
+    border-radius: 14px; overflow: hidden;
+  }
+  .barra-visor {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--cinza-borda); background: var(--fundo);
+    font-size: 13.5px; color: #1C231E; font-weight: 600;
+  }
+  .barra-visor .botao-secundario { margin-left: auto; }
+  #quadroDeclaracao { display: block; width: 100%; height: 76vh; min-height: 460px; border: 0; background: #555; }
+
+  /* botões dentro da barra de cada célula */
+  .alt-declaracao, .alt-previa {
+    font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    border-radius: 6px; padding: 2px 7px; cursor: pointer;
+    border: 1px solid var(--cinza-borda); background: #fff; color: #8A9384;
+    flex: 0 0 auto; white-space: nowrap; line-height: 1.5;
+  }
+  .alt-declaracao[aria-pressed="true"] { background: #EFEBF8; border-color: #B7A9DC; color: #5B4B8A; }
+  .alt-declaracao[aria-pressed="false"] { text-decoration: line-through; }
+  .alt-previa:hover, .alt-declaracao:hover { border-color: #9AA394; }
+
+  /* pedido que imprime só uma das duas coisas */
+  .celula.parcial { box-shadow: inset 3px 0 0 var(--ambar-borda); }
+
+  @media (max-width: 640px) {
+    .opcoes-envio { grid-template-columns: 1fr; }
+    .aviso-janelas { margin-left: 0; }
+  }
+
+  @media print {
+    #area-declaracao { display: none !important; }
+  }
+
 </style>
 </head>
 <body>
@@ -631,6 +738,8 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
       <button type="button" class="link-discreto" onclick="limparHistorico()">Limpar histórico de impressos</button>
     </div>
   </div>
+
+  <div id="area-declaracao"></div>
 
   <div id="area-grade">
     <div id="grade"></div>
@@ -858,6 +967,9 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     document.getElementById('barraFiltros').style.display = 'flex';
     document.getElementById('barraSelecao').style.display = 'flex';
     aplicarFiltro();
+ 
+    // DECLARAÇÃO: reinjeta os botões por pedido depois de cada redesenho.
+    if (window.Declaracao) window.Declaracao.aoRenderizar();
   }
 
   // ---------------------------------------------------------------------------
@@ -928,6 +1040,7 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     if (n === 0) {
       btn.style.display = 'none';
       resumo.style.display = 'none';
+      if (window.Declaracao) window.Declaracao.atualizar();  // DECLARAÇÃO
       return;
     }
 
@@ -944,6 +1057,8 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     resumo.style.display = 'inline-block';
     resumo.innerHTML = '<b>' + itens + (itens === 1 ? ' item' : ' itens')
       + '</b> para separar &nbsp;·&nbsp; ' + textoFolhas(n);
+ 
+    if (window.Declaracao) window.Declaracao.atualizar();  // DECLARAÇÃO
   }
 
   // ---------------------------------------------------------------------------
@@ -1088,6 +1203,10 @@ const HTML_FERRAMENTA = `<!DOCTYPE html>
     });
   })();
 </script>
+
+<!-- DECLARAÇÃO: pdf-lib carimba os dados no PDF oficial; declaracao.js é o módulo da feature. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="/.netlify/functions/declaracao"></script>
 
 </body>
 </html>
